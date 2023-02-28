@@ -5,17 +5,20 @@ import { each } from 'bluebird';
 import consola from 'consola';
 import dayjs from 'dayjs';
 import utcPlugin from 'dayjs/plugin/utc';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import { Knex } from 'knex';
 import ogr2ogr from './ogr2ogr';
+import { CronJob } from 'cron';
+import { Option, program } from 'commander';
 
 dayjs.extend(utcPlugin);
+dayjs.extend(relativeTime);
 
 const SHAPEFILES_DIR = resolve(__dirname, '..', 'shapefiles', 'queimadas');
 
 type ShapefileData = {
   dirname: string;
-  shapefile: string;
-  path: string;
+  shapefiles: string[];
   prefix: string;
   name: string;
 };
@@ -59,29 +62,24 @@ function filesList(): ShapefileData[] {
       if (!regex.test(dirname)) return;
 
       //verificar se existem um arquivo .shp no diretório
-      const [shapefile] = glob.sync('*.shp', {
+      const shapefiles = glob.sync('*.shp', {
         cwd: resolve(SHAPEFILES_DIR, dirname),
       });
-      if (!shapefile) return;
+
+      if (shapefiles.length === 0) return;
 
       // retorna dados preparados
 
       const [, year, month, name] = dirname.match(regex) || [];
 
-      return {
-        dirname,
-        shapefile,
-        path: join(dirname, shapefile),
-        prefix: `${year}${month}`,
-        name: (name || '').slice(1).trim(),
-      };
+      return { dirname, shapefiles, prefix: `${year}${month}`, name: (name || '').slice(1).trim() };
     })
     .filter((data) => data !== undefined) as ShapefileData[];
 
   return data.sort((a, b) => a.prefix.localeCompare(b.prefix));
 }
 
-async function main() {
+export async function exec() {
   // obtem lista de shapefiles disponíveis
   const shapefiles = filesList().map((data) =>
     Object.assign(
@@ -99,7 +97,9 @@ async function main() {
 
     if (!hasTable) {
       consola.info('Processando shapefile...');
-      ogr2ogr(join('queimadas', data.path), data.tmpTable);
+      const opts = { table: data.tmpTable, overwrite: false };
+      for (const shapefile of data.shapefiles)
+        await ogr2ogr(join('queimadas', join(data.dirname, shapefile)), opts);
     }
 
     consola.info('Verificando existência de dados antigos em "public"...');
@@ -123,13 +123,39 @@ async function main() {
     consola.info(`Arquivo ${data.dirname} finalizado.`);
   });
 
-  await knex.schema
-    .withSchema('public')
-    .createViewOrReplace('mapas_queimadas', (view) =>
-      view.as(knex.from(shapefiles.at(-1)?.table || ''))
-    );
+  await knex.transaction(async (trx) => {
+    await trx.schema.withSchema('public').dropViewIfExists('mapas_queimadas');
+    await trx.schema
+      .withSchema('public')
+      .createView('mapas_queimadas', (view) => view.as(knex.from(shapefiles.at(-1)?.table || '')));
+  });
 
   consola.success('Processo finalizado com sucesso!');
 }
 
-if (require.main === module) main().then(() => knex.destroy());
+export function cronExec(cronTime: string) {
+  const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  const job = new CronJob(cronTime, exec, null, true, timeZone);
+
+  const logNextDate = () => {
+    const nextDate = job.nextDate().toJSDate();
+    const dateStr = nextDate.toISOString();
+    const fromNow = dayjs(nextDate).fromNow();
+    consola.log(`\n=== Proxima atualização ${dateStr} (${fromNow}) ===\n`);
+  };
+
+  job.fireOnTick = () => exec().then(logNextDate);
+  job.fireOnTick();
+
+  return job;
+}
+
+if (require.main === module) {
+  program
+    .addOption(new Option('--cron [value]', 'The time to fire off the update in the cron syntax'))
+    .action(async (opts: { cron?: string }) => {
+      if (opts.cron) cronExec(opts.cron);
+      else await exec().then(() => knex.destroy());
+    })
+    .parseAsync(process.argv);
+}

@@ -4,6 +4,7 @@ import axios from 'axios';
 import { each, mapSeries } from 'bluebird';
 import { join } from 'node:path';
 import ogr2ogr from './ogr2ogr';
+import { Option, program } from 'commander';
 
 interface MunicipiosIBGE {
   'municipio-id': number;
@@ -24,14 +25,18 @@ interface MunicipiosIBGE {
   'regiao-nome': string;
 }
 
-export async function populateDadosMunicipios() {
+export async function populateDadosMunicipios(override?: boolean) {
+  const hasTable = await knex.schema.withSchema('public').hasTable('dados_municipios');
+
+  if (hasTable && !override) {
+    consola.warn('Já existem dados dos municipios no banco!');
+    return;
+  }
+
   consola.info('Coletando dados da API do IBGE...');
   const { data } = await axios.get(
     'http://servicodados.ibge.gov.br/api/v1/localidades/municipios?view=nivelado'
   );
-
-  consola.info('Verificando existência de dados antigos...');
-  const hasTable = await knex.schema.withSchema('public').hasTable('dados_municipios');
 
   if (!hasTable) {
     consola.info('Criando tabela para organização dos dados...');
@@ -83,10 +88,20 @@ export async function populateDadosMunicipios() {
   consola.success('Dados dos municipios inseridos!');
 }
 
-async function populateMapasMunicipios() {
+async function populateMapasMunicipios(override?: boolean) {
+  const [hasMunicipios, hasEstados] = await Promise.all([
+    knex.schema.withSchema('shapefiles').hasTable('br_municipios_2021'),
+    knex.schema.withSchema('shapefiles').hasTable('br_uf_2021'),
+  ]);
+
+  if (hasMunicipios && hasEstados && !override) {
+    consola.warn('Já existem mapas dos municipios e estados no banco!');
+    return;
+  }
+
   consola.info('Carregando shapefiles do ibge no banco de dados...');
-  ogr2ogr(join('mapas', 'BR_Municipios_2021', 'BR_Municipios_2021.shp'));
-  ogr2ogr(join('mapas', 'BR_UF_2021', 'BR_UF_2021.shp'));
+  await ogr2ogr(join('mapas', 'BR_Municipios_2021', 'BR_Municipios_2021.shp'));
+  await ogr2ogr(join('mapas', 'BR_UF_2021', 'BR_UF_2021.shp'));
 
   await knex.transaction(async (trx) => {
     consola.info('Removendo dados antigos...');
@@ -119,10 +134,14 @@ async function populateMapasMunicipios() {
   consola.success('Mapas dos municipios inseridos!');
 }
 
-async function main() {
-  return each([populateDadosMunicipios, populateMapasMunicipios], (func) => func()).then(() =>
-    consola.success('Processo concluído com sucesso!')
-  );
+async function main(override?: boolean) {
+  await each([populateDadosMunicipios, populateMapasMunicipios], (f) => f(override));
+  consola.success('Processo concluído com sucesso!');
 }
 
-if (require.main === module) main().then(() => knex.destroy());
+if (require.main === module) {
+  program
+    .addOption(new Option('--override', 'Override existing information on database.'))
+    .action(async (opts: { override?: boolean }) => main(opts.override).then(() => knex.destroy()))
+    .parseAsync(process.argv);
+}

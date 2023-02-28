@@ -6,11 +6,35 @@ info:
 servers:
   - url: /api/v1
 tags:
+  - name: Mapas
+    description: API para consulta de mapas
   - name: Queimadas
     description: API para consulta de dados de queimadas
   - name: Specification
     description: The swagger API specification
 paths:
+  /mapas/municipio/{id}:
+    get:
+      tags:
+        - Mapas
+      parameters:
+        - $ref: '#/components/parameters/municipio_id'
+      responses:
+        200:
+          description: Retorna dados de queimadas do municipio no formato GeoJson
+        204:
+          description: Não existem dados para a consulta
+  /mapas/estado/{id}:
+    get:
+      tags:
+        - Mapas
+      parameters:
+        - $ref: '#/components/parameters/estado_id'
+      responses:
+        200:
+          description: Retorna dados de queimadas do municipio no formato GeoJson
+        204:
+          description: Não existem dados para a consulta
   /queimadas/municipio/{id}:
     get:
       tags:
