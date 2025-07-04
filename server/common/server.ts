@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import l from './logger';
 import compression from 'compression';
 import helmet from 'helmet';
+import cors from 'cors';
 
 import errorHandler from '../api/middlewares/error.handler';
 import * as OpenApiValidator from 'express-openapi-validator';
@@ -18,6 +19,7 @@ export default class ExpressServer {
     app.use(bodyParser.json({ limit: process.env.REQUEST_LIMIT || '100kb' }));
     app.use(compression());
     app.use(helmet.hidePoweredBy());
+    app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
     app.use(helmet.crossOriginResourcePolicy({ policy: 'cross-origin' }));
     app.use(
       bodyParser.urlencoded({
@@ -59,7 +61,8 @@ export default class ExpressServer {
     }
     const welcome = (p: number) => (): void =>
       l.info(
-        `up and running in ${process.env.NODE_ENV || 'development'
+        `up and running in ${
+          process.env.NODE_ENV || 'development'
         } @: ${os.hostname()} on port: ${p}}`
       );
 
