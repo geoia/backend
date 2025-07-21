@@ -3,8 +3,8 @@ import { downloadMapas } from '../../services/download-mapas.service';
 import { populateMunicipios } from '../../services/populate-municipios.service';
 import { exec, getPrefixes, execDelete } from '../../services/process-queimadas.service';
 import { saveContent } from '../../services/upload-queimadas.service';
-
 import { processarEstatisticas } from '../../services/process-estatisticas.service';
+import { processShapefiles } from '../../services/assentamentos.processing.service';
 
 async function downloadMapasController(req: Request, res: Response) {
   const override: boolean = Boolean(req.query.override) || false;
@@ -20,6 +20,12 @@ async function populateMunicipiosController(req: Request, res: Response) {
 
 async function queimadasExecController(_req: Request, res: Response) {
   exec();
+  return res.status(202).json({ message: 'script iniciado com sucesso!' });
+}
+
+async function assentamentosExecController(req: Request, res: Response) {
+  const override: boolean = Boolean(req.query.override) || false;
+  processShapefiles(override);
   return res.status(202).json({ message: 'script iniciado com sucesso!' });
 }
 
@@ -63,6 +69,7 @@ export default {
   downloadMapasController,
   populateMunicipiosController,
   queimadasExecController,
+  assentamentosExecController,
   queimadasDeleteController,
   processEstatisticasController,
   upload,

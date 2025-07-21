@@ -31,6 +31,8 @@ export default class ExpressServer {
     app.use(cookieParser(process.env.SESSION_SECRET));
 
     app.use('/docs', express.static(`${path.normalize(__dirname + '/../..')}/public/api-explorer`));
+    app.use('/fotos', express.static(`${path.normalize(__dirname + '/../..')}/public/fotos`));
+
     app.get('/', (_, res) => res.redirect('/docs'));
 
     const apiSpec = path.join(__dirname, 'api.yml');
@@ -44,7 +46,9 @@ export default class ExpressServer {
         apiSpec,
         validateResponses,
         // ignorePaths: /.*\/spec(\/|$)/,
-        ignorePaths: (path: string) => path.endsWith('/spec') || path.endsWith('/upload'),
+        
+        ignorePaths: (path: string) =>
+          path.endsWith('/spec') || path.includes('upload') || path.endsWith('/fotos'),
       })
     );
   }

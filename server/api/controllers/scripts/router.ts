@@ -11,6 +11,7 @@ export default Router()
   .post('/download-mapas', authHandler, controller.downloadMapasController)
   .post('/populate-municipios', authHandler, controller.populateMunicipiosController)
   .post('/queimadas', authHandler, controller.queimadasExecController)
+  .post('/assentamentos', authHandler, controller.assentamentosExecController)
   .delete('/queimadas', authHandler, controller.queimadasDeleteController)
   .post('/queimadas/upload', authHandler, upload.single('zipfile'), controller.upload)
   .post('/estatisticas', authHandler, controller.processEstatisticasController);
